@@ -19,7 +19,21 @@ the forsyningonline.dk customer portal.*
 - Sensorer: **Vandforbrug i dag**, **i går** og **seneste time** (m³).
 - Historik hentes ved første opsætning (som standard 30 dage).
 
-## Installation (HACS, som brugerdefineret repository)
+## Installation
+
+### Home Assistant 2026.11 eller nyere (Marketplace)
+
+Fra 2026.11 er HACS indbygget som **Marketplace**.
+
+1. Åbn **Indstillinger → Marketplace**. Første gang skal du acceptere
+   risikoadvarslen.
+2. Vælg **Tilføj fra link**, og indtast
+   `https://github.com/hsk-dk/home-assistant-forsyningonline`.
+3. Vælg **Forsyning Online**, installér, og genstart Home Assistant.
+4. **Indstillinger → Enheder & tjenester → Tilføj integration → Forsyning
+   Online**.
+
+### Ældre versioner (HACS)
 
 1. Åbn **HACS → ⋮ → Brugerdefinerede repositories**.
 2. Tilføj `https://github.com/hsk-dk/home-assistant-forsyningonline`, kategori
@@ -28,6 +42,11 @@ the forsyningonline.dk customer portal.*
    Assistant.
 4. **Indstillinger → Enheder & tjenester → Tilføj integration → Forsyning
    Online**.
+
+### Manuelt
+
+Kopiér mappen `custom_components/forsyningonline` til
+`<config>/custom_components/` og genstart Home Assistant.
 
 ## Opsætning
 
