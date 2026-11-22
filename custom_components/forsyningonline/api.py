@@ -55,6 +55,13 @@ class ForsyningOnlineClient:
                 json={"username": self._username, "password": self._password},
                 timeout=_TIMEOUT,
             ) as resp:
+                if resp.status != 200:
+                    # Never log the request (it holds the password); the
+                    # portal's error text is safe and very useful.
+                    detail = (await resp.text())[:200]
+                    _LOGGER.warning(
+                        "Forsyning Online login failed: HTTP %s %s", resp.status, detail
+                    )
                 if resp.status in (400, 401, 403):
                     raise ForsyningOnlineAuthError(
                         f"Login rejected (HTTP {resp.status})"
@@ -63,6 +70,7 @@ class ForsyningOnlineClient:
                     raise ForsyningOnlineError(f"Login failed (HTTP {resp.status})")
                 data = await resp.json(content_type=None)
         except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+            _LOGGER.warning("Forsyning Online login: cannot reach portal: %r", err)
             raise ForsyningOnlineError(f"Cannot reach portal: {err}") from err
 
         token = data.get("token") if isinstance(data, dict) else None
