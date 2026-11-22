@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Forsyning Online",
+        "description": "Log ind med det samme brugernavn og den samme adgangskode, som du bruger på forsyningonline.dk (ikke MitID).",
+        "data": {
+          "username": "Brugernavn",
+          "password": "Adgangskode",
+          "backfill_days": "Antal dages historik der skal hentes"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log ind igen",
+        "description": "Adgangskoden til {username} virker ikke længere. Indtast den nuværende adgangskode.",
+        "data": {
+          "password": "Adgangskode"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Forkert brugernavn eller adgangskode.",
+      "cannot_connect": "Kunne ikke få forbindelse til forsyningonline.dk."
+    },
+    "abort": {
+      "already_configured": "Denne konto er allerede sat op.",
+      "reauth_successful": "Adgangskoden er opdateret."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Indstillinger for Forsyning Online",
+        "data": {
+          "update_interval_minutes": "Opdateringsinterval (minutter)",
+          "page_id": "Portalens side-id (ændres kun hvis portalen holder op med at virke)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "today": { "name": "Vandforbrug i dag" },
+      "yesterday": { "name": "Vandforbrug i går" },
+      "last_hour": { "name": "Vandforbrug seneste time" }
+    }
+  }
+}

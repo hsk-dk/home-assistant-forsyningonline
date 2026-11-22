@@ -1,0 +1,48 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Forsyning Online",
+        "description": "Log in with the same username and password you use on forsyningonline.dk (not MitID).",
+        "data": {
+          "username": "Username",
+          "password": "Password",
+          "backfill_days": "Days of history to import"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Log in again",
+        "description": "The password for {username} no longer works. Enter the current password.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "invalid_auth": "Wrong username or password.",
+      "cannot_connect": "Could not reach forsyningonline.dk."
+    },
+    "abort": {
+      "already_configured": "This account is already set up.",
+      "reauth_successful": "Password updated."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Forsyning Online options",
+        "data": {
+          "update_interval_minutes": "Update interval (minutes)",
+          "page_id": "Portal page id (only change if the portal stops working)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "today": { "name": "Water used today" },
+      "yesterday": { "name": "Water used yesterday" },
+      "last_hour": { "name": "Water used last hour" }
+    }
+  }
+}
