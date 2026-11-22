@@ -74,7 +74,7 @@ over. Ved nedetid hentes de manglende dage ved næste opdatering.
 ## Udvikling
 
 ```
-pip install pytest
+pip install pytest aiohttp
 pytest
 ```
 
