@@ -79,3 +79,11 @@ pytest
 ```
 
 Licens: MIT
+
+## Udgivelser
+
+Versionsnummeret står i `custom_components/forsyningonline/manifest.json`.
+Når en ny version skal ud: ret nummeret der, commit, og skub et tag med samme
+nummer (`git tag v0.1.1 && git push origin v0.1.1`). Så opretter GitHub
+automatisk en release, og HACS/Marketplace viser versionen i stedet for en
+commit-hash.
