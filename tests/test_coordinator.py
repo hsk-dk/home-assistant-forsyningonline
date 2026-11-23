@@ -11,29 +11,29 @@ import pytest
 
 pytest.importorskip("pytest_homeassistant_custom_component")
 
-from homeassistant.components.recorder import get_instance  # noqa: E402
-from homeassistant.components.recorder.statistics import (  # noqa: E402
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.statistics import (
     statistics_during_period,
 )
-from homeassistant.exceptions import ConfigEntryAuthFailed  # noqa: E402
-from homeassistant.helpers.update_coordinator import UpdateFailed  # noqa: E402
-from homeassistant.util import dt as dt_util  # noqa: E402
-from pytest_homeassistant_custom_component.common import MockConfigEntry  # noqa: E402
-from pytest_homeassistant_custom_component.components.recorder.common import (  # noqa: E402
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
+from homeassistant.util import dt as dt_util
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.forsyningonline import coordinator as coordinator_module  # noqa: E402
-from custom_components.forsyningonline.api import (  # noqa: E402
+from custom_components.forsyningonline import coordinator as coordinator_module
+from custom_components.forsyningonline.api import (
     ForsyningOnlineAuthError,
     ForsyningOnlineError,
     ForsyningOnlineNoDataError,
 )
-from custom_components.forsyningonline.const import (  # noqa: E402
+from custom_components.forsyningonline.const import (
     CONF_BACKFILL_DAYS,
     DOMAIN,
 )
-from custom_components.forsyningonline.coordinator import (  # noqa: E402
+from custom_components.forsyningonline.coordinator import (
     ForsyningOnlineCoordinator,
     _hour_deltas,
 )
@@ -48,12 +48,14 @@ class FakeClient:
     def __init__(self, data):
         self.data = data
         self.calls = []
+        self.drop_flags = {}
 
     async def async_get_years(self, first_year):
         return {first_year: 12.5}
 
-    async def async_get_day_series(self, day):
+    async def async_get_day_series(self, day, *, drop_placeholder=True):
         self.calls.append(day)
+        self.drop_flags[day] = drop_placeholder
         value = self.data.get(day)
         if value is None:
             raise ForsyningOnlineNoDataError("no data")
@@ -92,22 +94,26 @@ async def setup(recorder_mock, hass, freezer):
     return make
 
 
-async def _sums(hass):
+async def _stat_sums(hass, statistic_id):
     await async_wait_recording_done(hass)
     result = await get_instance(hass).async_add_executor_job(
         statistics_during_period,
         hass,
         datetime(2026, 1, 1, tzinfo=UTC),
         None,
-        {STATISTIC_ID},
+        {statistic_id},
         "hour",
         None,
         {"sum"},
     )
     return {
         dt_util.utc_from_timestamp(row["start"]): row["sum"]
-        for row in result.get(STATISTIC_ID, [])
+        for row in result.get(statistic_id, [])
     }
+
+
+async def _sums(hass):
+    return await _stat_sums(hass, STATISTIC_ID)
 
 
 def _utc(day, hour):
@@ -299,3 +305,54 @@ async def test_history_import_reaches_back_before_existing_data(setup, hass):
     assert sums[_utc(18, 4)] == pytest.approx(4.0)  # the new, older start
     assert sums[_utc(20, 22)] == pytest.approx(5.0)
     assert sums[_utc(21, 23)] == pytest.approx(10.5)  # whole range re-based
+
+
+async def test_price_set_on_existing_history_keeps_the_cost_sum_continuous(
+    setup, hass, monkeypatch
+):
+    """Turning the price on later must not restart the cost sum in the window.
+
+    The cost of the old hours is queued first; the import of the newest days
+    must continue from that, not from what the database holds at that moment.
+    Whether the recorder has committed by then is a matter of timing, so the
+    test holds all writes back until the import is done, which is the worst case.
+    """
+    full = {date(2026, 11, d): [(h, 0.1) for h in range(24)] for d in (19, 20, 21)}
+    full[date(2026, 11, 22)] = [(h, 0.1) for h in range(13)]
+    coordinator, _ = setup(full, backfill_days=3)
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    held = []
+    real_add = coordinator_module.async_add_external_statistics
+    monkeypatch.setattr(
+        coordinator_module,
+        "async_add_external_statistics",
+        lambda hass_, meta, stats: held.append((meta, stats)),
+    )
+    hass.config_entries.async_update_entry(
+        coordinator._entry, options={"price_per_m3": 10}
+    )
+    await coordinator._async_update_data()
+    for meta, stats in held:
+        real_add(hass, meta, stats)
+
+    water = await _stat_sums(hass, STATISTIC_ID)
+    cost = await _stat_sums(hass, f"{DOMAIN}:water_cost")
+    assert cost.keys() == water.keys()
+    ordered = [cost[k] for k in sorted(cost)]
+    assert ordered == sorted(ordered), "the cost sum must never go down"
+    last = max(water)
+    assert cost[last] == pytest.approx(water[last] * 10)
+
+
+async def test_only_old_days_get_the_manual_reading_filter(setup, hass):
+    """Recent days are live data; a big 00:00 value there is real usage."""
+    coordinator, client = setup({date(2026, 11, 21): [(5, 1.0)]}, backfill_days=5)
+    await coordinator._async_update_data()
+
+    # Today is 22 November: only days before the 19th may be filtered.
+    assert client.drop_flags[date(2026, 11, 17)] is True
+    assert client.drop_flags[date(2026, 11, 18)] is True
+    assert client.drop_flags[date(2026, 11, 19)] is False
+    assert client.drop_flags[date(2026, 11, 22)] is False

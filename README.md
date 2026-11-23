@@ -72,9 +72,11 @@ run the action **Forsyning Online: Import history** (Developer tools →
 Actions → `forsyningonline.import_history`) with the number of days, for
 example 365. The portal only has real hourly data from 25 February 2025 (about 640 days at
 the time of writing); older days hold a single manual-reading total and are
-skipped automatically. A long period takes a
-few minutes. Statistics in the imported period are replaced, and the cost
-statistic is rebuilt when a price is set.
+skipped automatically. The manual-reading total is only filtered out of days
+older than three days: on a recent day a big value at 00:00 is real usage (a
+leak, say) and is kept. A long period takes a few minutes. Statistics in the
+imported period are replaced, and the cost statistic is rebuilt when a price
+is set. Note that the rebuilt period is priced at the *current* price.
 
 ## How it works
 
@@ -87,9 +89,11 @@ skipped. After downtime the missing days are fetched on the next update.
 ## Known limitations
 
 - Only the total meter (`Totalt forbrug`) is used.
-- On the day the clocks go back the portal may list the repeated hour twice or
-  once; it is handled in both cases, but the real portal's behaviour on that
-  day is unverified.
+- On the day the clocks go back (25 hours) the portal lists only 24 hourly
+  values, so the repeated hour is not delivered. The cumulative sum stays
+  continuous, but that one hour's usage is not imported. This was checked
+  against real data from 25 October 2026. If the portal ever lists the hour
+  twice, both are imported.
 - If the portal changes its page id, it can be corrected under Options.
 
 ## Development
@@ -107,8 +111,14 @@ tests that need them and only the rest runs:
 - `tests/test_client.py`: login and token handling against a fake portal that
   enforces the login order below (needs `aiohttp`).
 - `tests/test_coordinator.py`: the statistics import against a real recorder,
-  including cumulative sums, days without data, partial backfills and daylight
-  saving time (needs the Home Assistant test plugin).
+  including cumulative sums, the cost statistic, days without data, partial
+  backfills and daylight saving time (needs the Home Assistant test plugin).
+- `tests/test_integration.py`: setup and unload, the config, options and reauth
+  flows, the `import_history` action and diagnostics (needs the plugin).
+- `tests/test_release_version.py`: the version check used by Create Release.
+
+Code style and types are checked in CI with `ruff check` and `mypy
+custom_components --ignore-missing-imports`; run them before pushing.
 
 ### Technical background
 
@@ -147,7 +157,8 @@ version. Use `skip-changelog` to keep a PR out of the notes.
 New version:
 
 1. Go to **Actions → Create Release → Run workflow**.
-2. Enter the version (e.g. `0.1.3`). Custom notes and pre-release are optional.
+2. Enter the version (e.g. `0.1.3`). It must be higher than the latest release;
+   the workflow stops otherwise. Custom notes and pre-release are optional.
 
 The workflow runs the tests, sets the version in `manifest.json`, commits it to
 `main`, creates the tag `vX.Y.Z` and publishes the release with

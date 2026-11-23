@@ -1,0 +1,6 @@
+target-version = "py313"
+
+[lint]
+# E4/E7/E9 and F are ruff's defaults; I sorts imports, UP modernises syntax and
+# RUF100 flags noqa comments that no longer do anything.
+select = ["E4", "E7", "E9", "F", "I", "UP", "RUF100"]

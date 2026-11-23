@@ -55,6 +55,8 @@ jobs:
             echo "::error::Tag v$VERSION already exists"
             exit 1
           fi
+          # Must be higher than every existing release (no accidental downgrade).
+          python3 .github/scripts/check_version.py "$VERSION"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "TAG=v$VERSION" >> "$GITHUB_ENV"
 
