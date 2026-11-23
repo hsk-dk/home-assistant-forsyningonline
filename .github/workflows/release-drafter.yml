@@ -1,6 +1,6 @@
 name: Release Drafter
 
-# Holder et udkast til næste release opdateret ud fra merged PR'er og deres labels.
+# Keeps a draft of the next release up to date from merged PRs and their labels.
 
 on:
   push:

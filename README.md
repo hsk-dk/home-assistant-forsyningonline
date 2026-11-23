@@ -1,128 +1,134 @@
+[![release](https://img.shields.io/github/v/release/hsk-dk/home-assistant-forsyningonline?style=plastic&labelColor=green)](https://github.com/hsk-dk/home-assistant-forsyningonline/releases) [![Buy me a coffee](https://img.shields.io/static/v1?label=Buy%20me%20a%20coffee&message=and%20say%20thanks&color=orange&logo=buymeacoffee&logoColor=white&style=plastic)](https://www.buymeacoffee.com/hskdk)
+
 # Forsyning Online for Home Assistant
 
-Henter dit vandforbrug **time for time** fra kundeportalen på
-[forsyningonline.dk](https://forsyningonline.dk) (bruges af en række danske
-vandværker) og gør det tilgængeligt i Home Assistant.
+Reads your water usage **hour by hour** from the customer portal at
+[forsyningonline.dk](https://forsyningonline.dk) (used by a number of Danish
+waterworks) and makes it available in Home Assistant.
 
-> **Uofficiel.** Integrationen bruger det samme interne API som portalens egen
-> hjemmeside. Det er ikke dokumenteret, og det kan ændre sig uden varsel.
-> Projektet har ingen tilknytning til Forsyning Online eller dit vandværk.
+> **Unofficial.** The integration uses the same internal API as the portal's
+> own website. It is not documented and may change without notice. The project
+> is not affiliated with Forsyning Online or your waterworks.
 
-*An unofficial Home Assistant integration that reads hourly water usage from
-the forsyningonline.dk customer portal.*
+*Dansk: Uofficiel integration der henter timeforbrug af vand fra
+forsyningonline.dk. Brugergrænsefladen er oversat til dansk og engelsk.*
 
-## Hvad får du
+## What you get
 
-- **Langtidsstatistik** `forsyningonline:water_total` (m³, kumulativ) med
-  timeopløsning. Den kan vælges direkte som vandkilde i **Indstillinger →
-  Dashboards → Energi → Vandforbrug**.
-- Sensorer: **Vandforbrug i dag**, **i går** og **seneste time** (m³).
-- Historik hentes ved første opsætning (som standard 30 dage).
+- **Long-term statistics** `forsyningonline:water_total` (m³, cumulative) with
+  hourly resolution. It can be picked directly as a water source under
+  **Settings → Dashboards → Energy → Water consumption**.
+- Sensors: **Water used today**, **yesterday** and **last hour** (m³).
+- History is imported during setup (30 days by default).
+- Localisation in English and Danish.
 
 ## Installation
 
-### Home Assistant 2026.11 eller nyere (Marketplace)
+### Home Assistant 2026.11 or newer (Marketplace)
 
-Fra 2026.11 er HACS indbygget som **Marketplace**.
+From 2026.11 HACS is built in as the **Marketplace**.
 
-1. Åbn **Indstillinger → Marketplace**. Første gang skal du acceptere
-   risikoadvarslen.
-2. Vælg **Tilføj fra link**, og indtast
+1. Open **Settings → Marketplace**. Accept the risk warning the first time.
+2. Choose **Add from link** and enter
    `https://github.com/hsk-dk/home-assistant-forsyningonline`.
-3. Vælg **Forsyning Online**, installér, og genstart Home Assistant.
-4. **Indstillinger → Enheder & tjenester → Tilføj integration → Forsyning
-   Online**.
+3. Select **Forsyning Online**, install it and restart Home Assistant.
+4. **Settings → Devices & services → Add integration → Forsyning Online**.
 
-### Ældre versioner (HACS)
+### Older versions (HACS)
 
-1. Åbn **HACS → ⋮ → Brugerdefinerede repositories**.
-2. Tilføj `https://github.com/hsk-dk/home-assistant-forsyningonline`, kategori
+1. Open **HACS → ⋮ → Custom repositories**.
+2. Add `https://github.com/hsk-dk/home-assistant-forsyningonline` with category
    **Integration**.
-3. Find **Forsyning Online** i HACS, vælg **Download**, og genstart Home
+3. Find **Forsyning Online** in HACS, choose **Download** and restart Home
    Assistant.
-4. **Indstillinger → Enheder & tjenester → Tilføj integration → Forsyning
-   Online**.
+4. **Settings → Devices & services → Add integration → Forsyning Online**.
 
-### Manuelt
+### Manual
 
-Kopiér mappen `custom_components/forsyningonline` til
-`<config>/custom_components/` og genstart Home Assistant.
+Copy the folder `custom_components/forsyningonline` to
+`<config>/custom_components/` and restart Home Assistant.
 
-## Opsætning
+## Setup
 
-Brug det **brugernavn og den adgangskode**, du logger ind med på
-forsyningonline.dk. MitID virker ikke, da Home Assistant skal kunne logge ind
-igen af sig selv.
+Use the **username and password** you log in with on forsyningonline.dk. MitID
+does not work, because Home Assistant has to be able to log in again by itself.
 
-Under integrationens **Indstillinger** kan du ændre opdateringsintervallet
-(standard 60 min, mindst 15 min). Vær venlig mod portalen: timedata skifter
-kun én gang i timen.
+Under the integration's **Options** you can change the update interval
+(default 60 min, minimum 15 min). Please be kind to the portal: hourly data
+only changes once an hour.
 
-## Sådan virker det
+## How it works
 
-Portalens token er kun gyldigt i ca. 15 minutter, så integrationen logger ind
-ved hver opdatering. Den læser timeforbruget for i går og i dag, regner en
-løbende sum og skriver den som ekstern statistik. Fremtidige timer springes
-over. Ved nedetid hentes de manglende dage ved næste opdatering.
+The portal's token is only valid for about 15 minutes, so the integration logs
+in on every update. It reads the hourly usage for yesterday and today,
+calculates a running sum and writes it as external statistics. Future hours are
+skipped. After downtime the missing days are fetched on the next update.
 
-## Kendte begrænsninger
+## Known limitations
 
-- Kun den samlede måler (`Totalt forbrug`) bruges.
-- Skiftedage mellem sommer- og vintertid er ikke testet.
-- Hvis portalen ændrer sit side-id, kan det rettes under Indstillinger.
+- Only the total meter (`Totalt forbrug`) is used.
+- Daylight saving time changeover days are untested.
+- If the portal changes its page id, it can be corrected under Options.
 
-## Udvikling
+## Development
 
 ```
 pip install pytest aiohttp
 pytest
 ```
 
-`aiohttp` skal være installeret. Ellers springer pytest `tests/test_client.py`
-over uden fejl, og kun parser-testene kører. `test_client.py` bruger en falsk
-portal, der håndhæver login-rækkefølgen nedenfor.
+`aiohttp` must be installed. Otherwise pytest silently skips
+`tests/test_client.py` and only the parser tests run. `test_client.py` uses a
+fake portal that enforces the login order below.
 
-### Teknisk baggrund
+### Technical background
 
-Portalens API er reverse-engineeret og ikke dokumenteret.
+The portal's API is reverse-engineered and undocumented.
 
 - Base: `https://api-forsyningonline.azurewebsites.net/api`
-- Rækkefølgen er tvunget, ellers svarer serveren HTTP 500:
-  1. `POST /auth/token` (brugernavn/kode) giver et Bearer JWT, gyldigt i 15
-     min. 400/401/403 betyder forkert login.
+- The order is enforced, otherwise the server answers HTTP 500:
+  1. `POST /auth/token` (username/password) returns a Bearer JWT valid for 15
+     minutes. 400/401/403 means wrong login.
   2. `GET /user/current`
   3. `GET /Location/all`
-  4. `POST /relay/Location/set` med første lokations `locationGuid` og
+  4. `POST /relay/Location/set` with the first location's `locationGuid` and
      `relationId`
-  5. Side-kald (server-drevet UI-JSON, standard page id står i `const.py`).
-- Timedata ligger i et chart-element (`elementType == 6`). Navnene er
-  `"HH:MM"`, og værdier kan have dansk decimalkomma (`"0,026"`). Parsing er i
-  `parser.py`, som ikke importerer noget fra Home Assistant.
-- `api.py` logger kun status og højst 200 tegn fejltekst, aldrig request-body.
-  Ved 401/403 logges der ind igen én gang.
+  5. Page calls (server-driven UI JSON, the default page id is in `const.py`).
+- Hourly data lives in a chart element (`elementType == 6`). Names are
+  `"HH:MM"` and values may use a Danish decimal comma (`"0,026"`). Parsing is
+  in `parser.py`, which imports nothing from Home Assistant.
+- `api.py` only logs the status and at most 200 characters of error text,
+  never the request body. On 401/403 it logs in again once.
 
-Statistikken skrives med `async_add_external_statistics` som
-`forsyningonline:water_total` (kumulativ `sum`). Første kørsel henter hele
-backfill-perioden (standard 30 dage, højst 365). Forkert login giver
-`ConfigEntryAuthFailed` og dermed reauth, andre fejl giver `UpdateFailed`.
+Statistics are written with `async_add_external_statistics` as
+`forsyningonline:water_total` (cumulative `sum`). The first run fetches the
+whole backfill period (default 30 days, at most 365). A wrong login raises
+`ConfigEntryAuthFailed` and thereby reauth; other errors raise `UpdateFailed`.
 
-## Udgivelser
+## Releases
 
-Release-noter samles automatisk af Release Drafter ud fra merged pull requests.
-PR'er får labels (`feature`, `fix`, `chore`, `docs` …) automatisk ud fra titel og
-branch-navn, og labels bestemmer også versionsforslaget. Brug `skip-changelog`
-for at holde en PR ude af noterne.
+Release notes are collected automatically by Release Drafter from merged pull
+requests. PRs are labelled (`feature`, `fix`, `chore`, `docs` …) automatically
+from their title and branch name, and the labels also decide the suggested
+version. Use `skip-changelog` to keep a PR out of the notes.
 
-Ny version:
+New version:
 
-1. Gå til **Actions → Create Release → Run workflow**.
-2. Skriv versionen (fx `0.1.3`). Egne noter og pre-release er valgfrit.
+1. Go to **Actions → Create Release → Run workflow**.
+2. Enter the version (e.g. `0.1.3`). Custom notes and pre-release are optional.
 
-Workflowet kører testene, sætter versionen i `manifest.json`, committer den til
-`main`, opretter tagget `vX.Y.Z` og udgiver releasen med `forsyningonline.zip`.
-Noterne kommer fra egne noter, ellers Release Drafters udkast, ellers
-autogenererede noter. HACS/Marketplace bruger tagget som versionsnummer.
+The workflow runs the tests, sets the version in `manifest.json`, commits it to
+`main`, creates the tag `vX.Y.Z` and publishes the release with
+`forsyningonline.zip`. The notes come from custom notes, otherwise the Release
+Drafter draft, otherwise auto-generated notes. HACS/Marketplace use the tag as
+the version number.
 
-## Licens
+## Support
+
+If you find the integration useful, you can say thanks:
+
+<a href="https://www.buymeacoffee.com/hskdk" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;" ></a>
+
+## License
 
 MIT
