@@ -82,8 +82,17 @@ Licens: MIT
 
 ## Udgivelser
 
-Versionsnummeret står i `custom_components/forsyningonline/manifest.json`.
-Når en ny version skal ud: ret nummeret der, commit, og skub et tag med samme
-nummer (`git tag v0.1.1 && git push origin v0.1.1`). Så opretter GitHub
-automatisk en release, og HACS/Marketplace viser versionen i stedet for en
-commit-hash.
+Release-noter samles automatisk af Release Drafter ud fra merged pull requests.
+PR'er får labels (`feature`, `fix`, `chore`, `docs` …) automatisk ud fra titel og
+branch-navn, og labels bestemmer også versionsforslaget. Brug `skip-changelog`
+for at holde en PR ude af noterne.
+
+Ny version:
+
+1. Gå til **Actions → Create Release → Run workflow**.
+2. Skriv versionen (fx `0.1.3`). Egne noter og pre-release er valgfrit.
+
+Workflowet kører testene, sætter versionen i `manifest.json`, committer den til
+`main`, opretter tagget `vX.Y.Z` og udgiver releasen med `forsyningonline.zip`.
+Noterne kommer fra egne noter, ellers Release Drafters udkast, ellers
+autogenererede noter. HACS/Marketplace bruger tagget som versionsnummer.

@@ -28,7 +28,7 @@ Custom integration der henter timeforbrug af vand fra forsyningonline.dk (ejer: 
 ## Test og udgivelse
 - `pip install pytest aiohttp && pytest -q`
 - `tests/test_client.py` bruger en falsk aiohttp-portal der håndhæver login-rækkefølgen ovenfor.
-- Ny version: opdater `manifest.json` version, commit, tag `vX.Y.Z`. `release.yml` tjekker at tag = manifest-version og opretter release, hvis den ikke findes.
+- Ny version: Henrik kører Actions → Create Release (workflow_dispatch) med versionsnummer. Workflowet tester, bumper `manifest.json`, committer til main, tagger `vX.Y.Z` og udgiver release + `forsyningonline.zip`. Noter: egne > Release Drafter-udkast (`.github/release-drafter.yml`) > autogenererede. Agenten behøver ikke selv tagge.
 - Marketplace/HACS kræver offentligt repo, `hacs.json` i roden og GitHub-releases.
 
 ## Kendte begrænsninger i agent-miljøet
