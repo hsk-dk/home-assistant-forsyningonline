@@ -62,7 +62,7 @@
       "fields": {
         "days": {
           "name": "Number of days",
-          "description": "How many days back to import (the portal may have less)."
+          "description": "How many days back to import. The portal only has hourly data from 25 February 2025; older days are skipped."
         }
       }
     }

@@ -70,7 +70,9 @@ apply to newly imported hours. Fixed charges
 Only 30 days are fetched when the integration is first set up. To fetch more,
 run the action **Forsyning Online: Import history** (Developer tools →
 Actions → `forsyningonline.import_history`) with the number of days, for
-example 365. The portal may hold less than you ask for. A long period takes a
+example 365. The portal only has real hourly data from 25 February 2025 (about 640 days at
+the time of writing); older days hold a single manual-reading total and are
+skipped automatically. A long period takes a
 few minutes. Statistics in the imported period are replaced, and the cost
 statistic is rebuilt when a price is set.
 

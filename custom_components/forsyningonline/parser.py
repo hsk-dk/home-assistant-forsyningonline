@@ -14,6 +14,12 @@ from typing import Any
 
 _HOUR_RE = re.compile(r"^(\d{1,2}):(\d{2})$")
 
+# Before the remote-reading meter went live the portal shows one large value at
+# 00:00 on every day (the consumption between two manual readings, 137 m3 and
+# 18 m3 in the author's data) instead of hourly values. A household cannot use
+# this much water in one hour, so such a value at 00:00 is not a measurement.
+PLACEHOLDER_HOUR_M3 = 10.0
+
 
 class ParseError(Exception):
     """The response did not contain hourly data in the expected shape."""
@@ -78,9 +84,23 @@ def parse_hourly_series(payload: str | dict | list) -> list[tuple[int, float]]:
             if 0 <= hour <= 23:
                 series.append((hour, value))
         if series:
-            return series
+            return _drop_placeholder(series)
 
     raise ParseError("No hourly chart data found in response")
+
+
+def _drop_placeholder(series: list[tuple[int, float]]) -> list[tuple[int, float]]:
+    """Remove a manual-reading placeholder at 00:00; reject a day that is only that."""
+    cleaned = [
+        (hour, value)
+        for hour, value in series
+        if not (hour == 0 and value > PLACEHOLDER_HOUR_M3)
+    ]
+    if len(cleaned) == len(series):
+        return series
+    if not any(value for _, value in cleaned):
+        raise ParseError("Day holds a manual-reading total, not hourly values")
+    return cleaned
 
 
 def parse_hourly(payload: str | dict | list) -> dict[int, float]:

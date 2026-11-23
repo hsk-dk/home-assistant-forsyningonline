@@ -62,7 +62,7 @@
       "fields": {
         "days": {
           "name": "Antal dage",
-          "description": "Hvor mange dage tilbage der skal importeres (portalen har måske færre)."
+          "description": "Hvor mange dage tilbage der skal importeres. Portalen har kun timedata fra 25. februar 2025; ældre dage springes over."
         }
       }
     }

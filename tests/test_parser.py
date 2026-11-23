@@ -116,3 +116,27 @@ def test_parse_yearly():
     payload = {"a": [{"elementType": 6, "data": [
         {"name": "2025", "value": 126.935}, {"name": "2026", "value": "112,116"}]}]}
     assert parser.parse_yearly(payload) == {2025: 126.935, 2026: 112.116}
+
+
+def _day(values):
+    return {"elementType": 6, "data": [
+        {"name": f"{h:02d}:00", "value": v} for h, v in enumerate(values)]}
+
+
+def test_manual_reading_placeholder_day_is_rejected():
+    # Before the remote meter: one big value at 00:00, zeros elsewhere.
+    with pytest.raises(parser.ParseError):
+        parser.parse_hourly_series(_day([137.129] + [0] * 23))
+
+
+def test_placeholder_is_dropped_but_real_hours_survive():
+    # The first day with real data still carries the placeholder at 00:00.
+    series = parser.parse_hourly_series(_day([18.129, 0.01, 0.02] + [0] * 21))
+    assert (0, 18.129) not in series
+    assert (1, 0.01) in series
+
+
+def test_a_large_value_in_another_hour_is_kept():
+    # A real leak must not be hidden.
+    series = parser.parse_hourly_series(_day([0] * 5 + [12.0] + [0] * 18))
+    assert (5, 12.0) in series
