@@ -3,17 +3,17 @@ tag-template: 'v$RESOLVED_VERSION'
 version-template: '$MAJOR.$MINOR.$PATCH'
 
 categories:
-  - title: '🛠 Brydende ændringer'
+  - title: '🛠 Breaking changes'
     labels: ['breaking-change', 'major']
-  - title: '🚀 Nyt'
+  - title: '🚀 Features'
     labels: ['feature', 'enhancement']
-  - title: '🐛 Fejlrettelser'
+  - title: '🐛 Bug fixes'
     labels: ['fix', 'bugfix', 'bug']
-  - title: '🧰 Vedligehold'
+  - title: '🧰 Maintenance'
     labels: ['chore', 'dependencies', 'maintenance', 'refactor']
-  - title: '📚 Dokumentation'
+  - title: '📚 Documentation'
     labels: ['documentation', 'docs']
-  - title: '🔒 Sikkerhed'
+  - title: '🔒 Security'
     labels: ['security']
 
 change-template: '- $TITLE (#$NUMBER)'
@@ -46,16 +46,20 @@ autolabeler:
     title: ['/^chore/i', '/bump/i']
 
 template: |
-  ## Ændringer
+  ## What's Changed
 
   $CHANGES
 
-  **Alle ændringer**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+  **Full Changelog**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
 
-  ## Installation og opdatering
+  ## Installation and update
 
-  - **Marketplace / HACS**: Opdater under Settings → Updates (HA 2026.11+), eller i HACS.
-  - **Manuelt**: Hent `forsyningonline.zip` fra denne release, pak ud i
-    `config/custom_components/forsyningonline/` og genstart Home Assistant.
+  - **Marketplace / HACS**: Update under Settings → Updates (HA 2026.11+), or in HACS.
+  - **Manual**: Download `forsyningonline.zip` from this release, extract it to
+    `config/custom_components/forsyningonline/` and restart Home Assistant.
 
-  Genstart Home Assistant efter opdatering. Tag gerne en backup først.
+  Restart Home Assistant after updating. Make a backup first.
+
+  ## Say thanks
+
+  <a href="https://www.buymeacoffee.com/hskdk" target="_blank"><img src="https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png" alt="Buy Me A Coffee" style="height: 41px !important;width: 174px !important;" ></a>

@@ -1,25 +1,25 @@
 name: Create Release
 
-# Kør fra Actions-fanen (Run workflow). Workflowet:
-#  1. kører testene
-#  2. sætter versionen i manifest.json og committer den til main
-#  3. opretter og pusher tagget vX.Y.Z
-#  4. udgiver en release med noter og forsyningonline.zip
-# Noter: egne noter > Release Drafter-udkast > autogenererede noter.
+# Run from the Actions tab (Run workflow). The workflow:
+#  1. runs the tests
+#  2. sets the version in manifest.json and commits it to main
+#  3. creates and pushes the tag vX.Y.Z
+#  4. publishes a release with notes and forsyningonline.zip
+# Notes: custom notes > Release Drafter draft > auto-generated notes.
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version, fx 0.1.3 (v foran er valgfrit)"
+        description: "Version, e.g. 0.1.3 (leading v is optional)"
         required: true
         type: string
       release_notes:
-        description: "Egne release-noter (valgfrit, tilsidesætter udkastet)"
+        description: "Custom release notes (optional, overrides the draft)"
         required: false
         type: string
       prerelease:
-        description: "Markér som pre-release"
+        description: "Mark as pre-release"
         required: false
         type: boolean
         default: false
@@ -42,17 +42,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Valider version og tag
+      - name: Validate version and tag
         env:
           INPUT_VERSION: ${{ inputs.version }}
         run: |
           VERSION="${INPUT_VERSION#v}"
           if [[ ! $VERSION =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
-            echo "::error::Version skal være på formen 1.2.3 eller 1.2.3-beta1"
+            echo "::error::Version must look like 1.2.3 or 1.2.3-beta1"
             exit 1
           fi
           if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
-            echo "::error::Tagget v$VERSION findes allerede"
+            echo "::error::Tag v$VERSION already exists"
             exit 1
           fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
@@ -62,12 +62,12 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Kør tests
+      - name: Run tests
         run: |
           pip install pytest aiohttp
           pytest -q
 
-      - name: Sæt version i manifest.json
+      - name: Set version in manifest.json
         run: |
           python3 - <<'PY'
           import json, os
@@ -81,7 +81,7 @@ jobs:
           PY
           git diff --stat
 
-      - name: Commit version, opret og push tag
+      - name: Commit version, create and push tag
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -89,18 +89,18 @@ jobs:
             git commit -am "chore: bump version to $VERSION"
             git push origin "HEAD:${GITHUB_REF_NAME}"
           else
-            echo "Manifest har allerede version $VERSION"
+            echo "Manifest already has version $VERSION"
           fi
           git tag "$TAG"
           git push origin "$TAG"
 
-      - name: Byg zip
+      - name: Build zip
         run: |
           cd "custom_components/$COMPONENT"
           zip -r "$GITHUB_WORKSPACE/$COMPONENT.zip" . -x "*.pyc" "__pycache__/*" ".DS_Store"
           unzip -l "$GITHUB_WORKSPACE/$COMPONENT.zip" | tail -3
 
-      - name: Find noter
+      - name: Find notes
         env:
           GH_TOKEN: ${{ github.token }}
           CUSTOM_NOTES: ${{ inputs.release_notes }}
@@ -121,15 +121,15 @@ jobs:
               fi
             fi
           fi
-          echo "Notekilde: $(grep NOTES_SOURCE "$GITHUB_ENV" | tail -1)"
+          echo "Notes source: $(grep NOTES_SOURCE "$GITHUB_ENV" | tail -1)"
 
-      - name: Udgiv release
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           PRERELEASE: ${{ inputs.prerelease }}
         run: |
           if [ "$NOTES_SOURCE" = "draft" ]; then
-            # Gør Release Drafters udkast til den rigtige release.
+            # Turn the Release Drafter draft into the real release.
             gh release edit "$DRAFT_TAG" --tag "$TAG" --title "$TAG" \
               --notes-file notes.md --draft=false --prerelease="$PRERELEASE"
           elif [ "$NOTES_SOURCE" = "custom" ]; then
@@ -142,7 +142,7 @@ jobs:
           gh release upload "$TAG" "$COMPONENT.zip" --clobber
           URL=$(gh release view "$TAG" --json url --jq .url)
           {
-            echo "### Release $TAG udgivet"
+            echo "### Release $TAG published"
             echo "$URL"
-            echo "Notekilde: $NOTES_SOURCE"
+            echo "Notes source: $NOTES_SOURCE"
           } >> "$GITHUB_STEP_SUMMARY"
