@@ -284,3 +284,18 @@ async def test_hours_imported_without_a_price_are_priced_later(setup, hass, free
         for row in result.get(cost_id, [])
     }
     assert sums[_utc(22, 13)] == pytest.approx(15.5 * 10)
+
+
+async def test_history_import_reaches_back_before_existing_data(setup, hass):
+    data = dict(DATA)
+    data[date(2026, 11, 18)] = [(5, 4.0)]
+    coordinator, _ = setup(data, backfill_days=1)
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    await coordinator.async_import_history(5)
+
+    sums = await _sums(hass)
+    assert sums[_utc(18, 4)] == pytest.approx(4.0)  # the new, older start
+    assert sums[_utc(20, 22)] == pytest.approx(5.0)
+    assert sums[_utc(21, 23)] == pytest.approx(10.5)  # whole range re-based

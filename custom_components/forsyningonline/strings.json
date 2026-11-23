@@ -41,10 +41,30 @@
   },
   "entity": {
     "sensor": {
-      "today": { "name": "Water used today" },
-      "yesterday": { "name": "Water used yesterday" },
-      "year": { "name": "Water used this year" },
-      "last_hour": { "name": "Water used last hour" }
+      "today": {
+        "name": "Water used today"
+      },
+      "yesterday": {
+        "name": "Water used yesterday"
+      },
+      "year": {
+        "name": "Water used this year"
+      },
+      "last_hour": {
+        "name": "Water used last hour"
+      }
+    }
+  },
+  "services": {
+    "import_history": {
+      "name": "Import history",
+      "description": "Fetches hourly water usage for the last number of days from the portal and writes it to the statistics. Existing statistics in that period are replaced. It can take a few minutes for a long period.",
+      "fields": {
+        "days": {
+          "name": "Number of days",
+          "description": "How many days back to import (the portal may have less)."
+        }
+      }
     }
   }
 }

@@ -65,6 +65,15 @@ it is set, and to any hours imported while it was off; later price changes only
 apply to newly imported hours. Fixed charges
 (standing and meter fees) are not included. Leave the price at 0 to turn it off.
 
+## Importing more history
+
+Only 30 days are fetched when the integration is first set up. To fetch more,
+run the action **Forsyning Online: Import history** (Developer tools →
+Actions → `forsyningonline.import_history`) with the number of days, for
+example 365. The portal may hold less than you ask for. A long period takes a
+few minutes. Statistics in the imported period are replaced, and the cost
+statistic is rebuilt when a price is set.
+
 ## How it works
 
 The portal's token is only valid for about 15 minutes, so the integration logs

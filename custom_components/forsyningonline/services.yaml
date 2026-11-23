@@ -1,0 +1,10 @@
+import_history:
+  fields:
+    days:
+      required: true
+      default: 365
+      selector:
+        number:
+          min: 1
+          max: 1095
+          mode: box

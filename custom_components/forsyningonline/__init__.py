@@ -2,18 +2,57 @@
 
 from __future__ import annotations
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME, Platform
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_create_clientsession
+from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .api import ForsyningOnlineClient
-from .const import CONF_PAGE_ID, DEFAULT_PAGE_ID
+from .const import (
+    ATTR_DAYS,
+    CONF_PAGE_ID,
+    DEFAULT_PAGE_ID,
+    DOMAIN,
+    MAX_HISTORY_DAYS,
+    SERVICE_IMPORT_HISTORY,
+)
 from .coordinator import ForsyningOnlineCoordinator
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
 type ForsyningOnlineConfigEntry = ConfigEntry[ForsyningOnlineCoordinator]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the history import action."""
+
+    async def _import_history(call: ServiceCall) -> None:
+        entries = hass.config_entries.async_loaded_entries(DOMAIN)
+        if not entries:
+            raise ServiceValidationError("Forsyning Online is not set up")
+        for entry in entries:
+            try:
+                await entry.runtime_data.async_import_history(call.data[ATTR_DAYS])
+            except UpdateFailed as err:
+                raise HomeAssistantError(f"History import failed: {err}") from err
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_IMPORT_HISTORY,
+        _import_history,
+        schema=vol.Schema(
+            {vol.Required(ATTR_DAYS): vol.All(vol.Coerce(int), vol.Range(min=1, max=MAX_HISTORY_DAYS))}
+        ),
+    )
+    return True
 
 
 async def async_setup_entry(

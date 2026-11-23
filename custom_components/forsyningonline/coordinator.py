@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from asyncio import Lock
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, tzinfo
 
@@ -154,6 +155,7 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         self._entry = entry
         self.statistic_id = f"{DOMAIN}:{STATISTIC_ID_SUFFIX}"
         self.cost_statistic_id = f"{DOMAIN}:{COST_STATISTIC_ID_SUFFIX}"
+        self._import_lock = Lock()
 
     # -- statistics helpers -------------------------------------------------
 
@@ -278,6 +280,24 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
     # -- main update --------------------------------------------------------
 
     async def _async_update_data(self) -> UsageData:
+        return await self._async_import()
+
+    async def async_import_history(self, days: int) -> UsageData:
+        """Import ``days`` days of history (the action "import_history").
+
+        Writes the whole range up to now again, so the cumulative sums stay
+        consistent whether the range is older or newer than what exists.
+        """
+        today = dt_util.now().date()
+        data = await self._async_import(start_day=today - timedelta(days=max(days, 1)))
+        self.async_set_updated_data(data)
+        return data
+
+    async def _async_import(self, start_day: date | None = None) -> UsageData:
+        async with self._import_lock:
+            return await self._async_import_locked(start_day)
+
+    async def _async_import_locked(self, start_day: date | None) -> UsageData:
         tz = dt_util.get_default_time_zone()
         today = dt_util.now().date()
         yesterday = today - timedelta(days=1)
@@ -287,7 +307,9 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             await self._backfill_cost(price)
 
         last_hour_imported = await self._last_imported_hour()
-        if last_hour_imported is None:
+        if start_day is not None:
+            pass  # explicit history import
+        elif last_hour_imported is None:
             backfill = min(
                 int(self._entry.data.get(CONF_BACKFILL_DAYS, DEFAULT_BACKFILL_DAYS)),
                 MAX_BACKFILL_DAYS,

@@ -41,10 +41,30 @@
   },
   "entity": {
     "sensor": {
-      "today": { "name": "Vandforbrug i dag" },
-      "yesterday": { "name": "Vandforbrug i går" },
-      "year": { "name": "Vandforbrug i år" },
-      "last_hour": { "name": "Vandforbrug seneste time" }
+      "today": {
+        "name": "Vandforbrug i dag"
+      },
+      "yesterday": {
+        "name": "Vandforbrug i går"
+      },
+      "year": {
+        "name": "Vandforbrug i år"
+      },
+      "last_hour": {
+        "name": "Vandforbrug seneste time"
+      }
+    }
+  },
+  "services": {
+    "import_history": {
+      "name": "Importér historik",
+      "description": "Henter timeforbrug for de seneste dage fra portalen og skriver det til statistikken. Eksisterende statistik i perioden erstattes. Det kan tage et par minutter for en lang periode.",
+      "fields": {
+        "days": {
+          "name": "Antal dage",
+          "description": "Hvor mange dage tilbage der skal importeres (portalen har måske færre)."
+        }
+      }
     }
   }
 }

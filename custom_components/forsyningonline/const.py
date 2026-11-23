@@ -25,3 +25,7 @@ MIN_UPDATE_INTERVAL = 15  # be gentle with a small waterworks' portal
 STATISTIC_ID_SUFFIX = "water_total"
 COST_STATISTIC_ID_SUFFIX = "water_cost"
 DEFAULT_PRICE = 0.0  # 0 = no cost statistic
+
+SERVICE_IMPORT_HISTORY = "import_history"
+ATTR_DAYS = "days"
+MAX_HISTORY_DAYS = 1095
