@@ -5,17 +5,27 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import date
 from typing import Any
 
 import aiohttp
 
 from .const import API_BASE_URL, DEFAULT_METER, DEFAULT_PAGE_ID
-from .parser import ParseError, parse_hourly
+from .parser import ParseError, parse_hourly_series
 
 _LOGGER = logging.getLogger(__name__)
 
 _TIMEOUT = aiohttp.ClientTimeout(total=30)
+
+# The portal's token lives for about 15 minutes. Log in a little earlier so a
+# normal update does not start with a request that is bound to be refused.
+_TOKEN_LIFETIME = 14 * 60
+
+
+def _monotonic() -> float:
+    """Clock for token expiry (a function so tests can move it)."""
+    return time.monotonic()
 
 
 class ForsyningOnlineError(Exception):
@@ -24,6 +34,13 @@ class ForsyningOnlineError(Exception):
 
 class ForsyningOnlineAuthError(ForsyningOnlineError):
     """Login was rejected."""
+
+
+class ForsyningOnlineNoDataError(ForsyningOnlineError):
+    """The portal answered, but had no hourly values for that day.
+
+    Normal right after midnight, or for days before the meter was installed.
+    """
 
 
 class ForsyningOnlineClient:
@@ -51,6 +68,7 @@ class ForsyningOnlineClient:
         self._page_id = page_id
         self._meter = meter
         self._token: str | None = None
+        self._token_expires = 0.0
         self._lock = asyncio.Lock()
 
     # -- low level ----------------------------------------------------------
@@ -81,7 +99,10 @@ class ForsyningOnlineClient:
             _LOGGER.warning("Forsyning Online %s: cannot reach portal: %r", what, err)
             raise ForsyningOnlineError(f"Cannot reach portal: {err}") from err
 
-        if status != 200 and status != 204:
+        if authed and status in (401, 403):
+            # An expired token is routine; the caller logs in again.
+            _LOGGER.debug("Forsyning Online %s: token refused (HTTP %s)", what, status)
+        elif status != 200 and status != 204:
             # Never log the request body (it can hold the password); the
             # portal's own error text is safe and very useful.
             _LOGGER.warning(
@@ -118,6 +139,7 @@ class ForsyningOnlineClient:
         if not token:
             raise ForsyningOnlineAuthError("Login response had no token")
         self._token = token
+        self._token_expires = _monotonic() + _TOKEN_LIFETIME
 
         await self._select_location()
 
@@ -177,19 +199,27 @@ class ForsyningOnlineClient:
             raise ForsyningOnlineError(f"Data request failed (HTTP {status})")
         return text
 
-    async def async_get_day(self, day: date) -> dict[int, float]:
-        """Return ``{hour: cubic_metres}`` for one calendar day (local time)."""
+    async def async_get_day_series(self, day: date) -> list[tuple[int, float]]:
+        """Return ``[(hour, cubic_metres), ...]`` for one calendar day.
+
+        Hours are local time, in the order the portal gave them. Raises
+        ForsyningOnlineNoDataError when the portal has no hourly values.
+        """
         async with self._lock:
-            if self._token is None:
+            if self._token is None or _monotonic() >= self._token_expires:
                 await self.async_login()
             try:
                 text = await self._post_page(day)
             except ForsyningOnlineAuthError:
-                # Token expired: log in once more, then try again.
+                # Token refused anyway: log in once more, then try again.
                 await self.async_login()
                 text = await self._post_page(day)
 
         try:
-            return parse_hourly(text)
+            return parse_hourly_series(text)
         except ParseError as err:
-            raise ForsyningOnlineError(str(err)) from err
+            raise ForsyningOnlineNoDataError(str(err)) from err
+
+    async def async_get_day(self, day: date) -> dict[int, float]:
+        """Return ``{hour: cubic_metres}`` for one calendar day (local time)."""
+        return dict(await self.async_get_day_series(day))

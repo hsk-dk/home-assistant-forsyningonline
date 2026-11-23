@@ -60,26 +60,36 @@ only changes once an hour.
 ## How it works
 
 The portal's token is only valid for about 15 minutes, so the integration logs
-in on every update. It reads the hourly usage for yesterday and today,
+in again whenever the token has expired (in practice on every update at the
+default interval). It reads the hourly usage for yesterday and today,
 calculates a running sum and writes it as external statistics. Future hours are
 skipped. After downtime the missing days are fetched on the next update.
 
 ## Known limitations
 
 - Only the total meter (`Totalt forbrug`) is used.
-- Daylight saving time changeover days are untested.
+- On the day the clocks go back the portal may list the repeated hour twice or
+  once; it is handled in both cases, but the real portal's behaviour on that
+  day is unverified.
 - If the portal changes its page id, it can be corrected under Options.
 
 ## Development
 
 ```
-pip install pytest aiohttp
+pip install -r requirements_test.txt
 pytest
 ```
 
-`aiohttp` must be installed. Otherwise pytest silently skips
-`tests/test_client.py` and only the parser tests run. `test_client.py` uses a
-fake portal that enforces the login order below.
+The requirements include `aiohttp` and Home Assistant's test plugin
+(`pytest-homeassistant-custom-component`). Without them pytest skips the
+tests that need them and only the rest runs:
+
+- `tests/test_parser.py`: parsing of the portal's responses.
+- `tests/test_client.py`: login and token handling against a fake portal that
+  enforces the login order below (needs `aiohttp`).
+- `tests/test_coordinator.py`: the statistics import against a real recorder,
+  including cumulative sums, days without data, partial backfills and daylight
+  saving time (needs the Home Assistant test plugin).
 
 ### Technical background
 
@@ -104,6 +114,9 @@ Statistics are written with `async_add_external_statistics` as
 `forsyningonline:water_total` (cumulative `sum`). The first run fetches the
 whole backfill period (default 30 days, at most 365). A wrong login raises
 `ConfigEntryAuthFailed` and thereby reauth; other errors raise `UpdateFailed`.
+A day without hourly data (just after midnight, or before the meter existed)
+is skipped; only when no day has data does the update fail. A backfill is
+written in pieces of seven days, so a failure keeps what was already fetched.
 
 ## Releases
 
