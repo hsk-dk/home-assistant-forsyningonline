@@ -95,7 +95,7 @@ class ForsyningOnlineClient:
             ) as resp:
                 text = await resp.text()
                 status = resp.status
-        except (aiohttp.ClientError, asyncio.TimeoutError) as err:
+        except (TimeoutError, aiohttp.ClientError) as err:
             _LOGGER.warning("Forsyning Online %s: cannot reach portal: %r", what, err)
             raise ForsyningOnlineError(f"Cannot reach portal: {err}") from err
 
@@ -199,11 +199,14 @@ class ForsyningOnlineClient:
             raise ForsyningOnlineError(f"Data request failed (HTTP {status})")
         return text
 
-    async def async_get_day_series(self, day: date) -> list[tuple[int, float]]:
+    async def async_get_day_series(
+        self, day: date, *, drop_placeholder: bool = True
+    ) -> list[tuple[int, float]]:
         """Return ``[(hour, cubic_metres), ...]`` for one calendar day.
 
         Hours are local time, in the order the portal gave them. Raises
         ForsyningOnlineNoDataError when the portal has no hourly values.
+        ``drop_placeholder`` is passed on to the parser.
         """
         async with self._lock:
             if self._token is None or _monotonic() >= self._token_expires:
@@ -216,7 +219,7 @@ class ForsyningOnlineClient:
                 text = await self._post_page(day)
 
         try:
-            return parse_hourly_series(text)
+            return parse_hourly_series(text, drop_placeholder=drop_placeholder)
         except ParseError as err:
             raise ForsyningOnlineNoDataError(str(err)) from err
 

@@ -47,6 +47,10 @@ _LOGGER = logging.getLogger(__name__)
 # Statistics are written in pieces of this many days, so a failure halfway
 # through a long backfill keeps what was already fetched.
 CHUNK_DAYS = 7
+# Days newer than this are live data. Only older days can hold the portal's
+# manual-reading total at 00:00, so only they get it filtered out; a big value
+# on a recent day is real usage and must not be hidden.
+PLACEHOLDER_MIN_AGE_DAYS = 3
 # How far back to look for the cumulative sum an import continues from.
 SUM_LOOKBACK = timedelta(days=30)
 
@@ -60,6 +64,13 @@ class UsageData:
     last_hour: float | None
     last_hour_start: datetime | None
     year_total: float | None = None
+
+
+def _utc_start(value: float | datetime) -> datetime:
+    """A statistics row's ``start`` (a timestamp or a datetime) as UTC."""
+    if isinstance(value, (int, float)):
+        return dt_util.utc_from_timestamp(value)
+    return dt_util.as_utc(value)
 
 
 def _local_hour_to_utc(
@@ -117,7 +128,7 @@ def _metadata(
     annotations = getattr(StatisticMetaData, "__annotations__", {})
     if "mean_type" in annotations:
         try:
-            from homeassistant.components.recorder.models import (  # noqa: PLC0415
+            from homeassistant.components.recorder.models import (
                 StatisticMeanType,
             )
 
@@ -174,10 +185,7 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         rows = result.get(statistic_id)
         if not rows:
             return None
-        start = rows[0]["start"]
-        if isinstance(start, (int, float)):
-            return dt_util.utc_from_timestamp(start)
-        return dt_util.as_utc(start)
+        return _utc_start(rows[0]["start"])
 
     async def _sum_before(
         self, first_hour: datetime, statistic_id: str | None = None
@@ -201,8 +209,9 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         )
         rows = result.get(statistic_id) or []
         for row in reversed(rows):
-            if row.get("sum") is not None:
-                return float(row["sum"])
+            total = row.get("sum")
+            if total is not None:
+                return float(total)
         return 0.0
 
     def _price(self) -> float:
@@ -219,13 +228,18 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             unit_class=None,
         )
 
-    async def _backfill_cost(self, price: float) -> None:
+    async def _backfill_cost(self, price: float) -> dict[datetime, float]:
         """Price usage that has no cost yet.
 
         Covers the first time a price is set and any hours imported while the
         price was off: every imported water hour after the last cost hour gets
         ``usage * price``.
+
+        Returns the cumulative cost it queued, by hour. The recorder may not
+        have stored these yet when the main import runs right after, so the
+        import continues from this map instead of reading them back.
         """
+        written: dict[datetime, float] = {}
         cost_last = await self._last_imported_hour(self.cost_statistic_id)
         start = (
             datetime(2000, 1, 1, tzinfo=dt_util.UTC)
@@ -257,12 +271,7 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             total = row.get("sum")
             if total is None:
                 continue
-            row_start = row["start"]
-            row_start = (
-                dt_util.utc_from_timestamp(row_start)
-                if isinstance(row_start, (int, float))
-                else dt_util.as_utc(row_start)
-            )
+            row_start = _utc_start(row["start"])
             total = float(total)
             if cost_last is not None and row_start <= cost_last:
                 previous = total
@@ -274,8 +283,19 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             cost += max(0.0, total - previous) * price
             previous = total
             stats.append(StatisticData(start=row_start, state=cost, sum=cost))
+            written[row_start] = cost
         if stats:
             async_add_external_statistics(self.hass, self._cost_metadata(), stats)
+        return written
+
+    async def _cost_base(
+        self, first_hour: datetime, written: dict[datetime, float]
+    ) -> float:
+        """Cumulative cost just before ``first_hour``."""
+        earlier = [start for start in written if start < first_hour]
+        if earlier:
+            return written[max(earlier)]
+        return await self._sum_before(first_hour, self.cost_statistic_id)
 
     # -- main update --------------------------------------------------------
 
@@ -303,8 +323,9 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         yesterday = today - timedelta(days=1)
 
         price = self._price()
+        backfilled: dict[datetime, float] = {}
         if price > 0:
-            await self._backfill_cost(price)
+            backfilled = await self._backfill_cost(price)
 
         last_hour_imported = await self._last_imported_hour()
         if start_day is not None:
@@ -332,7 +353,11 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
                 chunk = days[i : i + CHUNK_DAYS]
                 for day in chunk:
                     try:
-                        per_day[day] = await self._client.async_get_day_series(day)
+                        per_day[day] = await self._client.async_get_day_series(
+                            day,
+                            drop_placeholder=day
+                            < today - timedelta(days=PLACEHOLDER_MIN_AGE_DAYS),
+                        )
                     except ForsyningOnlineNoDataError as err:
                         # Normal just after midnight, or before the meter existed.
                         _LOGGER.debug("No hourly data for %s: %s", day, err)
@@ -355,8 +380,8 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
                 )
                 if price > 0:
                     if cost_running is None:
-                        cost_running = await self._sum_before(
-                            ordered[0][0], self.cost_statistic_id
+                        cost_running = await self._cost_base(
+                            ordered[0][0], backfilled
                         )
                     cost_stats: list[StatisticData] = []
                     for start, value in ordered:
@@ -388,8 +413,8 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         year_total: float | None = None
         try:
             years = await self._client.async_get_years(today.year)
-            value = years.get(today.year)
-            year_total = round(value, 3) if value is not None else None
+            year_value = years.get(today.year)
+            year_total = round(year_value, 3) if year_value is not None else None
         except ForsyningOnlineAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except ForsyningOnlineError as err:

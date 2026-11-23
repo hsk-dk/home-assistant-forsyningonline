@@ -140,3 +140,16 @@ def test_a_large_value_in_another_hour_is_kept():
     # A real leak must not be hidden.
     series = parser.parse_hourly_series(_day([0] * 5 + [12.0] + [0] * 18))
     assert (5, 12.0) in series
+
+
+def test_placeholder_is_kept_when_dropping_is_off():
+    # Recent days are live data: a big value at 00:00 is real usage.
+    series = parser.parse_hourly_series(
+        _day([12.0, 0.01] + [0] * 22), drop_placeholder=False
+    )
+    assert (0, 12.0) in series
+
+
+def test_a_lone_big_value_on_a_recent_day_is_kept():
+    series = parser.parse_hourly_series(_day([137.129] + [0] * 23), drop_placeholder=False)
+    assert (0, 137.129) in series
