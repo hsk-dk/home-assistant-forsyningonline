@@ -1,0 +1,61 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+version-template: '$MAJOR.$MINOR.$PATCH'
+
+categories:
+  - title: '🛠 Brydende ændringer'
+    labels: ['breaking-change', 'major']
+  - title: '🚀 Nyt'
+    labels: ['feature', 'enhancement']
+  - title: '🐛 Fejlrettelser'
+    labels: ['fix', 'bugfix', 'bug']
+  - title: '🧰 Vedligehold'
+    labels: ['chore', 'dependencies', 'maintenance', 'refactor']
+  - title: '📚 Dokumentation'
+    labels: ['documentation', 'docs']
+  - title: '🔒 Sikkerhed'
+    labels: ['security']
+
+change-template: '- $TITLE (#$NUMBER)'
+change-title-escapes: '\<*_&'
+
+version-resolver:
+  major:
+    labels: ['major', 'breaking-change']
+  minor:
+    labels: ['minor', 'feature', 'enhancement']
+  patch:
+    labels: ['patch', 'fix', 'bugfix', 'chore', 'dependencies', 'maintenance', 'documentation']
+  default: patch
+
+exclude-labels:
+  - 'skip-changelog'
+
+autolabeler:
+  - label: 'documentation'
+    files: ['*.md', 'docs/**/*']
+    title: ['/^docs/i']
+  - label: 'bug'
+    branch: ['/fix\/.+/']
+    title: ['/^fix/i']
+  - label: 'feature'
+    branch: ['/feature\/.+/']
+    title: ['/^feat/i']
+  - label: 'chore'
+    branch: ['/chore\/.+/']
+    title: ['/^chore/i', '/bump/i']
+
+template: |
+  ## Ændringer
+
+  $CHANGES
+
+  **Alle ændringer**: https://github.com/$OWNER/$REPOSITORY/compare/$PREVIOUS_TAG...v$RESOLVED_VERSION
+
+  ## Installation og opdatering
+
+  - **Marketplace / HACS**: Opdater under Settings → Updates (HA 2026.11+), eller i HACS.
+  - **Manuelt**: Hent `forsyningonline.zip` fra denne release, pak ud i
+    `config/custom_components/forsyningonline/` og genstart Home Assistant.
+
+  Genstart Home Assistant efter opdatering. Tag gerne en backup først.
