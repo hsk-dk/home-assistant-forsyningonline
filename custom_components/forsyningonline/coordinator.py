@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, tzinfo
 
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
@@ -25,6 +25,7 @@ from .api import (
     ForsyningOnlineAuthError,
     ForsyningOnlineClient,
     ForsyningOnlineError,
+    ForsyningOnlineNoDataError,
 )
 from .const import (
     CONF_BACKFILL_DAYS,
@@ -39,6 +40,12 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# Statistics are written in pieces of this many days, so a failure halfway
+# through a long backfill keeps what was already fetched.
+CHUNK_DAYS = 7
+# How far back to look for the cumulative sum an import continues from.
+SUM_LOOKBACK = timedelta(days=30)
+
 
 @dataclass
 class UsageData:
@@ -48,6 +55,44 @@ class UsageData:
     yesterday: float | None
     last_hour: float | None
     last_hour_start: datetime | None
+
+
+def _local_hour_to_utc(
+    day: date, hour: int, fold: int, tz: tzinfo
+) -> datetime | None:
+    """UTC start of a local clock hour, or None if that hour does not exist.
+
+    ``fold`` is 1 for the second pass through a repeated hour (clocks going
+    back). An hour skipped when clocks go forward has no UTC start.
+    """
+    local = datetime.combine(day, time(hour), tzinfo=tz).replace(fold=fold)
+    utc = dt_util.as_utc(local)
+    back = utc.astimezone(tz)
+    if back.date() != day or back.hour != hour:
+        return None
+    return utc
+
+
+def _hour_deltas(
+    days: list[date],
+    per_day: dict[date, list[tuple[int, float]]],
+    tz: tzinfo,
+    now_utc: datetime,
+) -> list[tuple[datetime, float]]:
+    """Ordered ``(utc_hour_start, cubic_metres)``, future hours left out."""
+    deltas: dict[datetime, float] = {}
+    for day in days:
+        seen: dict[int, int] = {}
+        for hour, value in per_day.get(day, []):
+            fold = seen.get(hour, 0)
+            seen[hour] = fold + 1
+            if fold > 1:
+                continue
+            start = _local_hour_to_utc(day, hour, fold, tz)
+            if start is None or start > now_utc:
+                continue
+            deltas[start] = value
+    return sorted(deltas.items())
 
 
 def _metadata(name: str, statistic_id: str) -> StatisticMetaData:
@@ -120,12 +165,16 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         return dt_util.as_utc(start)
 
     async def _sum_before(self, first_hour: datetime) -> float:
-        """Cumulative sum at the hour just before ``first_hour`` (0 if none)."""
-        prev = first_hour - timedelta(hours=1)
+        """Cumulative sum just before ``first_hour`` (0 if nothing earlier).
+
+        Looks back over SUM_LOOKBACK rather than a single hour: if the hour
+        right before happens to be missing, starting from 0 would make the
+        cumulative sum jump back to zero.
+        """
         result = await get_instance(self.hass).async_add_executor_job(
             statistics_during_period,
             self.hass,
-            prev,
+            first_hour - SUM_LOOKBACK,
             first_hour,
             {self.statistic_id},
             "hour",
@@ -142,8 +191,7 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
 
     async def _async_update_data(self) -> UsageData:
         tz = dt_util.get_default_time_zone()
-        now_local = dt_util.now()
-        today = now_local.date()
+        today = dt_util.now().date()
         yesterday = today - timedelta(days=1)
 
         last_hour_imported = await self._last_imported_hour()
@@ -159,56 +207,54 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
                 yesterday,
             )
 
-        per_day: dict[date, dict[int, float]] = {}
-        day = start_day
+        days = [start_day + timedelta(days=i) for i in range((today - start_day).days + 1)]
+        per_day: dict[date, list[tuple[int, float]]] = {}
+        running: float | None = None
+        latest: tuple[datetime, float] | None = None
+
         try:
-            while day <= today:
-                per_day[day] = await self._client.async_get_day(day)
-                day += timedelta(days=1)
-                if day <= today and len(per_day) > 3:
-                    await asyncio.sleep(0.3)  # gentle during backfill
+            for i in range(0, len(days), CHUNK_DAYS):
+                chunk = days[i : i + CHUNK_DAYS]
+                for day in chunk:
+                    try:
+                        per_day[day] = await self._client.async_get_day_series(day)
+                    except ForsyningOnlineNoDataError as err:
+                        # Normal just after midnight, or before the meter existed.
+                        _LOGGER.debug("No hourly data for %s: %s", day, err)
+                    if len(days) > 3 and day != today:
+                        await asyncio.sleep(0.3)  # gentle during backfill
+
+                ordered = _hour_deltas(chunk, per_day, tz, dt_util.utcnow())
+                if not ordered:
+                    continue
+                if running is None:
+                    running = await self._sum_before(ordered[0][0])
+                stats: list[StatisticData] = []
+                for start, value in ordered:
+                    running += value
+                    stats.append(StatisticData(start=start, state=running, sum=running))
+                async_add_external_statistics(
+                    self.hass,
+                    _metadata("Forsyning Online water usage", self.statistic_id),
+                    stats,
+                )
+                latest = ordered[-1]
         except ForsyningOnlineAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except ForsyningOnlineError as err:
             raise UpdateFailed(str(err)) from err
 
-        # Flatten to ordered (utc_hour_start, delta) pairs, skipping the future.
-        now_utc = dt_util.utcnow()
-        deltas: dict[datetime, float] = {}
-        for d, hours in per_day.items():
-            for hour, value in hours.items():
-                local = datetime.combine(d, time(hour), tzinfo=tz)
-                start = dt_util.as_utc(local)
-                if start > now_utc:
-                    continue
-                deltas[start] = value
-        ordered = sorted(deltas.items())
+        if not per_day:
+            # Not one day had data: more likely a changed portal than a quiet night.
+            raise UpdateFailed("The portal returned no hourly data")
 
-        if ordered:
-            running = await self._sum_before(ordered[0][0])
-            stats: list[StatisticData] = []
-            for start, value in ordered:
-                running += value
-                stats.append(StatisticData(start=start, state=running, sum=running))
-            async_add_external_statistics(
-                self.hass,
-                _metadata("Forsyning Online – vandforbrug", self.statistic_id),
-                stats,
-            )
-
-        # Values for the sensors.
         def day_total(d: date) -> float | None:
             hours = per_day.get(d)
-            return round(sum(hours.values()), 3) if hours else None
-
-        last_hour_start: datetime | None = None
-        last_hour_value: float | None = None
-        if ordered:
-            last_hour_start, last_hour_value = ordered[-1]
+            return round(sum(v for _, v in hours), 3) if hours else None
 
         return UsageData(
             today=day_total(today),
             yesterday=day_total(yesterday),
-            last_hour=last_hour_value,
-            last_hour_start=last_hour_start,
+            last_hour=latest[1] if latest else None,
+            last_hour_start=latest[0] if latest else None,
         )

@@ -91,3 +91,22 @@ def test_not_json():
 def test_no_chart():
     with pytest.raises(parser.ParseError):
         parser.parse_hourly({"elementType": 9, "sections": []})
+
+
+def test_series_keeps_order_and_repeated_hours():
+    """The day clocks go back, the portal may list 02:00 twice."""
+    payload = {
+        "elementType": 6,
+        "data": [
+            {"name": "01:00", "value": 1},
+            {"name": "02:00", "value": 2},
+            {"name": "02:00", "value": 3},
+            {"name": "03:00", "value": 4},
+        ],
+    }
+    assert parser.parse_hourly_series(payload) == [(1, 1.0), (2, 2.0), (2, 3.0), (3, 4.0)]
+
+
+def test_chart_without_hours_is_a_parse_error():
+    with pytest.raises(parser.ParseError):
+        parser.parse_hourly({"elementType": 6, "data": []})

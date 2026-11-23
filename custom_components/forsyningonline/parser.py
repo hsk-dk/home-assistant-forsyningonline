@@ -51,8 +51,11 @@ def _iter_chart_data(node: Any):
             yield from _iter_chart_data(child)
 
 
-def parse_hourly(payload: str | dict | list) -> dict[int, float]:
-    """Return ``{hour: cubic_metres}`` for the day in the response.
+def parse_hourly_series(payload: str | dict | list) -> list[tuple[int, float]]:
+    """Return ``[(hour, cubic_metres), ...]`` in the order the portal gave them.
+
+    The order matters on the day clocks go back: the repeated hour appears
+    twice and the second one is the hour after the change.
 
     Raises ParseError when no hourly chart is present.
     """
@@ -63,7 +66,7 @@ def parse_hourly(payload: str | dict | list) -> dict[int, float]:
             raise ParseError(f"Response is not JSON: {err}") from err
 
     for data in _iter_chart_data(payload):
-        hours: dict[int, float] = {}
+        series: list[tuple[int, float]] = []
         for item in data:
             if not isinstance(item, dict):
                 continue
@@ -73,8 +76,16 @@ def parse_hourly(payload: str | dict | list) -> dict[int, float]:
                 continue
             hour = int(match.group(1))
             if 0 <= hour <= 23:
-                hours[hour] = value
-        if hours:
-            return hours
+                series.append((hour, value))
+        if series:
+            return series
 
     raise ParseError("No hourly chart data found in response")
+
+
+def parse_hourly(payload: str | dict | list) -> dict[int, float]:
+    """Return ``{hour: cubic_metres}`` for the day in the response.
+
+    Raises ParseError when no hourly chart is present.
+    """
+    return dict(parse_hourly_series(payload))
