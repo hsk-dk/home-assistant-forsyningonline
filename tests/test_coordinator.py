@@ -250,3 +250,37 @@ async def test_cost_statistic_follows_the_price(setup, hass):
     }
     assert sums[_utc(20, 22)] == pytest.approx(1.0 * 16.2)
     assert sums[_utc(21, 23)] == pytest.approx(6.5 * 16.2)
+
+
+async def test_hours_imported_without_a_price_are_priced_later(setup, hass, freezer):
+    coordinator, _ = setup(DATA, options={"price_per_m3": 10})
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    # Price off while 14:00 local is imported, then on again.
+    entry = coordinator._entry
+    hass.config_entries.async_update_entry(entry, options={})
+    freezer.move_to("2026-11-22 13:30:00+00:00")
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    hass.config_entries.async_update_entry(entry, options={"price_per_m3": 10})
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    cost_id = f"{DOMAIN}:water_cost"
+    result = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        None,
+        {cost_id},
+        "hour",
+        None,
+        {"sum"},
+    )
+    sums = {
+        dt_util.utc_from_timestamp(row["start"]): row["sum"]
+        for row in result.get(cost_id, [])
+    }
+    assert sums[_utc(22, 13)] == pytest.approx(15.5 * 10)

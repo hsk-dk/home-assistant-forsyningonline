@@ -218,35 +218,60 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         )
 
     async def _backfill_cost(self, price: float) -> None:
-        """First time a price is set: price the usage already imported."""
-        if await self._last_imported_hour(self.cost_statistic_id) is not None:
-            return
+        """Price usage that has no cost yet.
+
+        Covers the first time a price is set and any hours imported while the
+        price was off: every imported water hour after the last cost hour gets
+        ``usage * price``.
+        """
+        cost_last = await self._last_imported_hour(self.cost_statistic_id)
+        start = (
+            datetime(2000, 1, 1, tzinfo=dt_util.UTC)
+            if cost_last is None
+            else cost_last - SUM_LOOKBACK
+        )
         result = await get_instance(self.hass).async_add_executor_job(
             statistics_during_period,
             self.hass,
-            datetime(2000, 1, 1, tzinfo=dt_util.UTC),
+            start,
             None,
             {self.statistic_id},
             "hour",
             None,
             {"sum"},
         )
-        previous = 0.0
+        rows = result.get(self.statistic_id) or []
+
         cost = 0.0
+        previous: float | None = 0.0
+        if cost_last is not None:
+            cost = await self._sum_before(
+                cost_last + timedelta(hours=1), self.cost_statistic_id
+            )
+            previous = None  # unknown until a row at or before cost_last is seen
+
         stats: list[StatisticData] = []
-        for row in result.get(self.statistic_id) or []:
+        for row in rows:
             total = row.get("sum")
             if total is None:
                 continue
-            start = row["start"]
-            start = (
-                dt_util.utc_from_timestamp(start)
-                if isinstance(start, (int, float))
-                else dt_util.as_utc(start)
+            row_start = row["start"]
+            row_start = (
+                dt_util.utc_from_timestamp(row_start)
+                if isinstance(row_start, (int, float))
+                else dt_util.as_utc(row_start)
             )
-            cost += max(0.0, float(total) - previous) * price
-            previous = float(total)
-            stats.append(StatisticData(start=start, state=cost, sum=cost))
+            total = float(total)
+            if cost_last is not None and row_start <= cost_last:
+                previous = total
+                continue
+            if previous is None:
+                # No usage figure to measure the first new hour against.
+                previous = total
+                continue
+            cost += max(0.0, total - previous) * price
+            previous = total
+            stats.append(StatisticData(start=row_start, state=cost, sum=cost))
         if stats:
             async_add_external_statistics(self.hass, self._cost_metadata(), stats)
 
