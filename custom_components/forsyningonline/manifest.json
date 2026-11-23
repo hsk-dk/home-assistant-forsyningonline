@@ -1,6 +1,7 @@
 {
   "domain": "forsyningonline",
   "name": "Forsyning Online",
+  "categories": ["water.meters_leak_detection"],
   "codeowners": ["@hsk-dk"],
   "config_flow": true,
   "dependencies": ["recorder"],
