@@ -57,6 +57,13 @@ Under the integration's **Options** you can change the update interval
 (default 60 min, minimum 15 min). Please be kind to the portal: hourly data
 only changes once an hour.
 
+Set **Price per m³ (incl. VAT)** in Options to get the statistic
+`forsyningonline:water_cost` (in your Home Assistant currency). Pick it as
+**Use a cost statistic** on the water source in the Energy dashboard to see
+what the water costs. The price is applied to the whole history the first time
+it is set; later changes only apply to newly imported hours. Fixed charges
+(standing and meter fees) are not included. Leave the price at 0 to turn it off.
+
 ## How it works
 
 The portal's token is only valid for about 15 minutes, so the integration logs

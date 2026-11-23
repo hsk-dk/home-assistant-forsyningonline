@@ -33,6 +33,7 @@
         "title": "Forsyning Online options",
         "data": {
           "update_interval_minutes": "Update interval (minutes)",
+          "price_per_m3": "Price per m³ incl. VAT (0 = no cost statistic)",
           "page_id": "Portal page id (only change if the portal stops working)"
         }
       }

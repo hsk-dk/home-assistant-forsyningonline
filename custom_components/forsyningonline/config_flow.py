@@ -25,9 +25,11 @@ from .api import (
 from .const import (
     CONF_BACKFILL_DAYS,
     CONF_PAGE_ID,
+    CONF_PRICE,
     CONF_UPDATE_INTERVAL,
     DEFAULT_BACKFILL_DAYS,
     DEFAULT_PAGE_ID,
+    DEFAULT_PRICE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MAX_BACKFILL_DAYS,
@@ -138,6 +140,10 @@ class ForsyningOnlineOptionsFlow(OptionsFlow):
                         CONF_UPDATE_INTERVAL,
                         default=options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL),
                     ): vol.All(int, vol.Range(min=MIN_UPDATE_INTERVAL, max=1440)),
+                    vol.Optional(
+                        CONF_PRICE,
+                        default=options.get(CONF_PRICE, DEFAULT_PRICE),
+                    ): vol.All(vol.Coerce(float), vol.Range(min=0, max=1000)),
                     vol.Required(
                         CONF_PAGE_ID,
                         default=options.get(CONF_PAGE_ID, DEFAULT_PAGE_ID),

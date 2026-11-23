@@ -29,8 +29,11 @@ from .api import (
 )
 from .const import (
     CONF_BACKFILL_DAYS,
+    CONF_PRICE,
     CONF_UPDATE_INTERVAL,
+    COST_STATISTIC_ID_SUFFIX,
     DEFAULT_BACKFILL_DAYS,
+    DEFAULT_PRICE,
     DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     MAX_BACKFILL_DAYS,
@@ -96,14 +99,19 @@ def _hour_deltas(
     return sorted(deltas.items())
 
 
-def _metadata(name: str, statistic_id: str) -> StatisticMetaData:
+def _metadata(
+    name: str,
+    statistic_id: str,
+    unit: str = UnitOfVolume.CUBIC_METERS,
+    unit_class: str | None = "volume",
+) -> StatisticMetaData:
     """Build metadata that works across Home Assistant versions."""
     meta: dict = {
         "has_sum": True,
         "name": name,
         "source": DOMAIN,
         "statistic_id": statistic_id,
-        "unit_of_measurement": UnitOfVolume.CUBIC_METERS,
+        "unit_of_measurement": unit,
     }
     annotations = getattr(StatisticMetaData, "__annotations__", {})
     if "mean_type" in annotations:
@@ -118,7 +126,7 @@ def _metadata(name: str, statistic_id: str) -> StatisticMetaData:
     if "has_mean" in annotations and "mean_type" not in meta:
         meta["has_mean"] = False
     if "unit_class" in annotations:
-        meta["unit_class"] = "volume"
+        meta["unit_class"] = unit_class
     return StatisticMetaData(**meta)  # type: ignore[typeddict-item]
 
 
@@ -145,19 +153,23 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         self._client = client
         self._entry = entry
         self.statistic_id = f"{DOMAIN}:{STATISTIC_ID_SUFFIX}"
+        self.cost_statistic_id = f"{DOMAIN}:{COST_STATISTIC_ID_SUFFIX}"
 
     # -- statistics helpers -------------------------------------------------
 
-    async def _last_imported_hour(self) -> datetime | None:
+    async def _last_imported_hour(
+        self, statistic_id: str | None = None
+    ) -> datetime | None:
+        statistic_id = statistic_id or self.statistic_id
         result = await get_instance(self.hass).async_add_executor_job(
             get_last_statistics,
             self.hass,
             1,
-            self.statistic_id,
+            statistic_id,
             True,
             {"sum"},
         )
-        rows = result.get(self.statistic_id)
+        rows = result.get(statistic_id)
         if not rows:
             return None
         start = rows[0]["start"]
@@ -165,28 +177,78 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             return dt_util.utc_from_timestamp(start)
         return dt_util.as_utc(start)
 
-    async def _sum_before(self, first_hour: datetime) -> float:
+    async def _sum_before(
+        self, first_hour: datetime, statistic_id: str | None = None
+    ) -> float:
         """Cumulative sum just before ``first_hour`` (0 if nothing earlier).
 
         Looks back over SUM_LOOKBACK rather than a single hour: if the hour
         right before happens to be missing, starting from 0 would make the
         cumulative sum jump back to zero.
         """
+        statistic_id = statistic_id or self.statistic_id
         result = await get_instance(self.hass).async_add_executor_job(
             statistics_during_period,
             self.hass,
             first_hour - SUM_LOOKBACK,
             first_hour,
+            {statistic_id},
+            "hour",
+            None,
+            {"sum"},
+        )
+        rows = result.get(statistic_id) or []
+        for row in reversed(rows):
+            if row.get("sum") is not None:
+                return float(row["sum"])
+        return 0.0
+
+    def _price(self) -> float:
+        try:
+            return max(0.0, float(self._entry.options.get(CONF_PRICE, DEFAULT_PRICE)))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _cost_metadata(self) -> StatisticMetaData:
+        return _metadata(
+            "Forsyning Online water cost",
+            self.cost_statistic_id,
+            unit=self.hass.config.currency,
+            unit_class=None,
+        )
+
+    async def _backfill_cost(self, price: float) -> None:
+        """First time a price is set: price the usage already imported."""
+        if await self._last_imported_hour(self.cost_statistic_id) is not None:
+            return
+        result = await get_instance(self.hass).async_add_executor_job(
+            statistics_during_period,
+            self.hass,
+            datetime(2000, 1, 1, tzinfo=dt_util.UTC),
+            None,
             {self.statistic_id},
             "hour",
             None,
             {"sum"},
         )
-        rows = result.get(self.statistic_id) or []
-        for row in reversed(rows):
-            if row.get("sum") is not None:
-                return float(row["sum"])
-        return 0.0
+        previous = 0.0
+        cost = 0.0
+        stats: list[StatisticData] = []
+        for row in result.get(self.statistic_id) or []:
+            total = row.get("sum")
+            if total is None:
+                continue
+            start = row["start"]
+            start = (
+                dt_util.utc_from_timestamp(start)
+                if isinstance(start, (int, float))
+                else dt_util.as_utc(start)
+            )
+            cost += max(0.0, float(total) - previous) * price
+            previous = float(total)
+            stats.append(StatisticData(start=start, state=cost, sum=cost))
+        if stats:
+            async_add_external_statistics(self.hass, self._cost_metadata(), stats)
 
     # -- main update --------------------------------------------------------
 
@@ -194,6 +256,10 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         tz = dt_util.get_default_time_zone()
         today = dt_util.now().date()
         yesterday = today - timedelta(days=1)
+
+        price = self._price()
+        if price > 0:
+            await self._backfill_cost(price)
 
         last_hour_imported = await self._last_imported_hour()
         if last_hour_imported is None:
@@ -211,6 +277,7 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
         days = [start_day + timedelta(days=i) for i in range((today - start_day).days + 1)]
         per_day: dict[date, list[tuple[int, float]]] = {}
         running: float | None = None
+        cost_running: float | None = None
         latest: tuple[datetime, float] | None = None
 
         try:
@@ -239,6 +306,22 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
                     _metadata("Forsyning Online water usage", self.statistic_id),
                     stats,
                 )
+                if price > 0:
+                    if cost_running is None:
+                        cost_running = await self._sum_before(
+                            ordered[0][0], self.cost_statistic_id
+                        )
+                    cost_stats: list[StatisticData] = []
+                    for start, value in ordered:
+                        cost_running += value * price
+                        cost_stats.append(
+                            StatisticData(
+                                start=start, state=cost_running, sum=cost_running
+                            )
+                        )
+                    async_add_external_statistics(
+                        self.hass, self._cost_metadata(), cost_stats
+                    )
                 latest = ordered[-1]
         except ForsyningOnlineAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err

@@ -33,6 +33,7 @@
         "title": "Indstillinger for Forsyning Online",
         "data": {
           "update_interval_minutes": "Opdateringsinterval (minutter)",
+          "price_per_m3": "Pris pr. m³ inkl. moms (0 = ingen omkostningsstatistik)",
           "page_id": "Portalens side-id (ændres kun hvis portalen holder op med at virke)"
         }
       }

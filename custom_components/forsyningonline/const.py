@@ -15,6 +15,7 @@ DEFAULT_METER = "total"
 CONF_BACKFILL_DAYS = "backfill_days"
 CONF_PAGE_ID = "page_id"
 CONF_UPDATE_INTERVAL = "update_interval_minutes"
+CONF_PRICE = "price_per_m3"
 
 DEFAULT_BACKFILL_DAYS = 30
 MAX_BACKFILL_DAYS = 365
@@ -22,3 +23,5 @@ DEFAULT_UPDATE_INTERVAL = 60  # minutes
 MIN_UPDATE_INTERVAL = 15  # be gentle with a small waterworks' portal
 
 STATISTIC_ID_SUFFIX = "water_total"
+COST_STATISTIC_ID_SUFFIX = "water_cost"
+DEFAULT_PRICE = 0.0  # 0 = no cost statistic

@@ -79,10 +79,11 @@ async def setup(recorder_mock, hass, freezer):
     await hass.config.async_set_time_zone("Europe/Copenhagen")
     freezer.move_to("2026-11-22 12:30:00+00:00")  # 13:30 in Copenhagen (UTC+1)
 
-    def make(data, backfill_days=2):
+    def make(data, backfill_days=2, options=None):
         entry = MockConfigEntry(
             domain=DOMAIN,
             data={"username": "u", "password": "p", CONF_BACKFILL_DAYS: backfill_days},
+            options=options or {},
         )
         entry.add_to_hass(hass)
         client = FakeClient(data)
@@ -225,3 +226,27 @@ def test_clocks_going_forward_skips_the_missing_hour():
 def test_an_hour_listed_three_times_ignores_the_extra():
     result = _deltas(date(2026, 10, 25), [(2, 1.0), (2, 2.0), (2, 3.0)])
     assert [v for _, v in result] == [1.0, 2.0]
+
+
+async def test_cost_statistic_follows_the_price(setup, hass):
+    coordinator, _ = setup(DATA, options={"price_per_m3": 16.2})
+    await coordinator._async_update_data()
+    await async_wait_recording_done(hass)
+
+    cost_id = f"{DOMAIN}:water_cost"
+    result = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        datetime(2026, 1, 1, tzinfo=UTC),
+        None,
+        {cost_id},
+        "hour",
+        None,
+        {"sum"},
+    )
+    sums = {
+        dt_util.utc_from_timestamp(row["start"]): row["sum"]
+        for row in result.get(cost_id, [])
+    }
+    assert sums[_utc(20, 22)] == pytest.approx(1.0 * 16.2)
+    assert sums[_utc(21, 23)] == pytest.approx(6.5 * 16.2)
