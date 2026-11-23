@@ -42,6 +42,7 @@
     "sensor": {
       "today": { "name": "Water used today" },
       "yesterday": { "name": "Water used yesterday" },
+      "year": { "name": "Water used this year" },
       "last_hour": { "name": "Water used last hour" }
     }
   }

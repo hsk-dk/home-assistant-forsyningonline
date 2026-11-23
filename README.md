@@ -18,7 +18,7 @@ forsyningonline.dk. Brugergrænsefladen er oversat til dansk og engelsk.*
 - **Long-term statistics** `forsyningonline:water_total` (m³, cumulative) with
   hourly resolution. It can be picked directly as a water source under
   **Settings → Dashboards → Energy → Water consumption**.
-- Sensors: **Water used today**, **yesterday** and **last hour** (m³).
+- Sensors: **Water used today**, **yesterday**, **last hour** and **this year** (m³). The yearly figure comes from the portal's yearly view.
 - History is imported during setup (30 days by default).
 - Localisation in English and Danish.
 

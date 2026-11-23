@@ -49,6 +49,9 @@ class FakeClient:
         self.data = data
         self.calls = []
 
+    async def async_get_years(self, first_year):
+        return {first_year: 12.5}
+
     async def async_get_day_series(self, day):
         self.calls.append(day)
         value = self.data.get(day)

@@ -50,6 +50,16 @@ SENSORS: tuple[ForsyningOnlineSensorDescription, ...] = (
         value_fn=lambda d: d.yesterday,
     ),
     ForsyningOnlineSensorDescription(
+        key="year",
+        translation_key="year",
+        device_class=SensorDeviceClass.WATER,
+        native_unit_of_measurement=UnitOfVolume.CUBIC_METERS,
+        # Resets on 1 January; HA treats the drop as a new cycle.
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        suggested_display_precision=3,
+        value_fn=lambda d: d.year_total,
+    ),
+    ForsyningOnlineSensorDescription(
         key="last_hour",
         translation_key="last_hour",
         device_class=SensorDeviceClass.WATER,

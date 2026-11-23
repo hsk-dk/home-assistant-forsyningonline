@@ -89,3 +89,32 @@ def parse_hourly(payload: str | dict | list) -> dict[int, float]:
     Raises ParseError when no hourly chart is present.
     """
     return dict(parse_hourly_series(payload))
+
+
+_YEAR_RE = re.compile(r"^(\d{4})$")
+
+
+def parse_yearly(payload: str | dict | list) -> dict[int, float]:
+    """Return ``{year: cubic_metres}`` from the portal's yearly chart.
+
+    Raises ParseError when no yearly chart is present.
+    """
+    if isinstance(payload, str):
+        try:
+            payload = json.loads(payload)
+        except ValueError as err:
+            raise ParseError(f"Response is not JSON: {err}") from err
+
+    for data in _iter_chart_data(payload):
+        years: dict[int, float] = {}
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            match = _YEAR_RE.match(str(item.get("name", "")).strip())
+            value = _to_float(item.get("value"))
+            if match is not None and value is not None:
+                years[int(match.group(1))] = value
+        if years:
+            return years
+
+    raise ParseError("No yearly chart data found in response")

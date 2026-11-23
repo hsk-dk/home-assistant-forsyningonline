@@ -42,6 +42,7 @@
     "sensor": {
       "today": { "name": "Vandforbrug i dag" },
       "yesterday": { "name": "Vandforbrug i går" },
+      "year": { "name": "Vandforbrug i år" },
       "last_hour": { "name": "Vandforbrug seneste time" }
     }
   }

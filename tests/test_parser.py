@@ -110,3 +110,9 @@ def test_series_keeps_order_and_repeated_hours():
 def test_chart_without_hours_is_a_parse_error():
     with pytest.raises(parser.ParseError):
         parser.parse_hourly({"elementType": 6, "data": []})
+
+
+def test_parse_yearly():
+    payload = {"a": [{"elementType": 6, "data": [
+        {"name": "2025", "value": 126.935}, {"name": "2026", "value": "112,116"}]}]}
+    assert parser.parse_yearly(payload) == {2025: 126.935, 2026: 112.116}

@@ -55,6 +55,7 @@ class UsageData:
     yesterday: float | None
     last_hour: float | None
     last_hour_start: datetime | None
+    year_total: float | None = None
 
 
 def _local_hour_to_utc(
@@ -252,7 +253,20 @@ class ForsyningOnlineCoordinator(DataUpdateCoordinator[UsageData]):
             hours = per_day.get(d)
             return round(sum(v for _, v in hours), 3) if hours else None
 
+        # Year to date comes from the portal's own yearly view. A failure here
+        # must not break the hourly import, so it only leaves the sensor empty.
+        year_total: float | None = None
+        try:
+            years = await self._client.async_get_years(today.year)
+            value = years.get(today.year)
+            year_total = round(value, 3) if value is not None else None
+        except ForsyningOnlineAuthError as err:
+            raise ConfigEntryAuthFailed(str(err)) from err
+        except ForsyningOnlineError as err:
+            _LOGGER.debug("Could not fetch yearly usage: %s", err)
+
         return UsageData(
+            year_total=year_total,
             today=day_total(today),
             yesterday=day_total(yesterday),
             last_hour=latest[1] if latest else None,

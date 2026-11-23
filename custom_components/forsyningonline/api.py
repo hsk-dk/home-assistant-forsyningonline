@@ -12,7 +12,7 @@ from typing import Any
 import aiohttp
 
 from .const import API_BASE_URL, DEFAULT_METER, DEFAULT_PAGE_ID
-from .parser import ParseError, parse_hourly_series
+from .parser import ParseError, parse_hourly_series, parse_yearly
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class ForsyningOnlineClient:
 
     # -- data ---------------------------------------------------------------
 
-    async def _post_page(self, day: date) -> str:
+    async def _post_page(self, day: date, scope: str = "hour") -> str:
         status, text = await self._request(
             "POST",
             "/relay/page",
@@ -187,7 +187,7 @@ class ForsyningOnlineClient:
                     "form": {
                         "selectedMeter": self._meter,
                         "selectedDate": day.strftime("%d-%m-%Y"),
-                        "selectedViewscope": "hour",
+                        "selectedViewscope": scope,
                     },
                 },
             },
@@ -223,3 +223,19 @@ class ForsyningOnlineClient:
     async def async_get_day(self, day: date) -> dict[int, float]:
         """Return ``{hour: cubic_metres}`` for one calendar day (local time)."""
         return dict(await self.async_get_day_series(day))
+
+    async def async_get_years(self, first_year: int) -> dict[int, float]:
+        """Return ``{year: cubic_metres}`` from the portal's yearly view."""
+        async with self._lock:
+            if self._token is None or _monotonic() >= self._token_expires:
+                await self.async_login()
+            try:
+                text = await self._post_page(date(first_year, 1, 1), "year")
+            except ForsyningOnlineAuthError:
+                await self.async_login()
+                text = await self._post_page(date(first_year, 1, 1), "year")
+
+        try:
+            return parse_yearly(text)
+        except ParseError as err:
+            raise ForsyningOnlineNoDataError(str(err)) from err
