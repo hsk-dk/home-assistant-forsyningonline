@@ -3,10 +3,10 @@
 Custom integration der henter timeforbrug af vand fra forsyningonline.dk (ejer: Henrik, Grejs Vandværk, Vejle) og lægger det ind som langtidsstatistik i Home Assistant. Henrik skriver dansk. README og UI-tekster er på dansk.
 
 ## Status
-- Version 0.1.1 (release oprettet manuelt i GitHub-UI; tag-push virker ikke fra agent-miljøet).
+- Version 0.1.2, udgivet via workflowet Create Release (release + `forsyningonline.zip`).
 - Kører hos Henrik på HA 2026.11 (installeret via Marketplace, tidligere HACS). Entry loaded, sensorer viser data, Energi-dashboardet bruger `forsyningonline:water_total` ("Grejs Vand").
-- 9 tests (pytest) består. Workflows: `.github/workflows/validate.yml` (tests, hassfest, hacs) og `release.yml`.
-- Åben: HACS-tjekket i Validate fejler på `hacs/action`. Sandsynlig årsag: repoet mangler About-beskrivelse og topics (skal sættes på GitHub af Henrik, `gh` er ikke logget ind her). Et lokalt ikon (`custom_components/forsyningonline/brand/`) er tilføjet til brand-tjekket. Hvis det stadig fejler: hent den røde linje fra hacs-trinnets log.
+- 9 tests (pytest) i CLAUDE.md-optælling; lokalt sås 6 bestået og 1 sprunget over (ikke undersøgt). Workflows: `validate.yml` (tests, hassfest, hacs), `release-drafter.yml` og `create-release.yml`.
+- Validate er grøn. HACS-tjekket krævede About-beskrivelse og topics (sat af Henrik) og `categories` i manifestet (`water.meters_leak_detection`).
 
 ## Portalens API (reverse-engineeret)
 - Base: `https://api-forsyningonline.azurewebsites.net/api`
