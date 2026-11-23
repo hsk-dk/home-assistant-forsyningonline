@@ -78,7 +78,33 @@ pip install pytest aiohttp
 pytest
 ```
 
-Licens: MIT
+`aiohttp` skal være installeret. Ellers springer pytest `tests/test_client.py`
+over uden fejl, og kun parser-testene kører. `test_client.py` bruger en falsk
+portal, der håndhæver login-rækkefølgen nedenfor.
+
+### Teknisk baggrund
+
+Portalens API er reverse-engineeret og ikke dokumenteret.
+
+- Base: `https://api-forsyningonline.azurewebsites.net/api`
+- Rækkefølgen er tvunget, ellers svarer serveren HTTP 500:
+  1. `POST /auth/token` (brugernavn/kode) giver et Bearer JWT, gyldigt i 15
+     min. 400/401/403 betyder forkert login.
+  2. `GET /user/current`
+  3. `GET /Location/all`
+  4. `POST /relay/Location/set` med første lokations `locationGuid` og
+     `relationId`
+  5. Side-kald (server-drevet UI-JSON, standard page id står i `const.py`).
+- Timedata ligger i et chart-element (`elementType == 6`). Navnene er
+  `"HH:MM"`, og værdier kan have dansk decimalkomma (`"0,026"`). Parsing er i
+  `parser.py`, som ikke importerer noget fra Home Assistant.
+- `api.py` logger kun status og højst 200 tegn fejltekst, aldrig request-body.
+  Ved 401/403 logges der ind igen én gang.
+
+Statistikken skrives med `async_add_external_statistics` som
+`forsyningonline:water_total` (kumulativ `sum`). Første kørsel henter hele
+backfill-perioden (standard 30 dage, højst 365). Forkert login giver
+`ConfigEntryAuthFailed` og dermed reauth, andre fejl giver `UpdateFailed`.
 
 ## Udgivelser
 
@@ -96,3 +122,7 @@ Workflowet kører testene, sætter versionen i `manifest.json`, committer den ti
 `main`, opretter tagget `vX.Y.Z` og udgiver releasen med `forsyningonline.zip`.
 Noterne kommer fra egne noter, ellers Release Drafters udkast, ellers
 autogenererede noter. HACS/Marketplace bruger tagget som versionsnummer.
+
+## Licens
+
+MIT
